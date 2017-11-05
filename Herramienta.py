@@ -42,41 +42,62 @@ def EsOutLayer(candidato, n, desvStandard):
 
 
 
+def CincoPaquetesDeTipoEchoRequest(dst, ttl):
+	packetesAEnviar = [] 
+	for x in range(5):
+		packetesAEnviar.append(IP(dst = dst, ttl = ttl) / ICMP( type = echoRequest))
+	return packetesAEnviar
+
 def TraceRouteConOutlayers(ipDst = "", url = ""):
 	dst = url if ipDst == "" else ipDst
 	ttl = 1
 
-	packet1 = IP(dst = dst, ttl = ttl) / ICMP( type = echoRequest)
-	packet2 = IP(dst = dst, ttl = ttl) / ICMP( type = echoRequest)
-	packet3 = IP(dst = dst, ttl = ttl) / ICMP( type = echoRequest)
-
-
-	res = sr([packet1,packet2,packet3])
+	res = sr(CincoPaquetesDeTipoEchoRequest(dst, ttl))
  
 	caminoRecorrido = []
 
+	rutaMasProbableASeguir = []
+
 	while res[results][0][mensajeRecibido][ICMP].type == timeExceed :
 
-		rttPromedio = TomarRttPromedio(res)
+		ipDevueltos = {}
+		for r in res[results]:
+			if r[mensajeRecibido][IP].src in ipDevueltos.keys():
+				ipDevueltos[r[mensajeRecibido][IP].src] += 1
+			else:
+				ipDevueltos[r[mensajeRecibido][IP].src] = 1
 
-		caminoRecorrido.append({'src' : res[results][0][mensajeRecibido][IP].src, 'rtt' : rttPromedio })
+		ipMasProbable = next(iter(ipDevueltos))
 
+		for ip in ipDevueltos :
+			if ipDevueltos[ip] > ipDevueltos[ipMasProbable] :
+				ipMasProbable = ip
+
+		caminoRecorrido.append({'rtt': None, 'ip_adress': ipMasProbable, 'salto_intercontinental': None, 'hop_num': ttl})
 		ttl += 1
-		packet1[IP].ttl  = ttl
-		packet2[IP].ttl  = ttl
-		packet3[IP].ttl  = ttl
-		
-
-		res = sr([packet1,packet2,packet3])
+		res = sr(CincoPaquetesDeTipoEchoRequest(dst, ttl))
 
 
-	#para tomar el rtt del ultimo mensaje que fue al destino elegido
-	rttPromedio = TomarRttPromedio(res)
+	caminoRecorrido.append({'rtt': None, 'ip_adress': dst, 'salto_intercontinental': None, 'hop_num': ttl})
 
-	caminoRecorrido.append({'src' : res[results][0][mensajeRecibido][IP].src, 'rtt' : rttPromedio })
+	res = [[]]
+
+	for hop in caminoRecorrido:
+		rttPromedio = 0
+
+		print "MEDIR RTT CONTRA IP: " + hop['ip_adress']
+
+		res = sr(CincoPaquetesDeTipoEchoRequest(hop['ip_adress'], hop['hop_num']-1))
+
+		for x in res[results]:
+			rttPromedio += (x[mensajeRecibido][IP].time - x[mensajeEnviado][IP].sent_time)/5
+		hop['rtt'] = rttPromedio
+
 
 	for x in caminoRecorrido:
 		print json.dumps(x)
+
+	return
 
 	print "\n"
 	print "\n"
