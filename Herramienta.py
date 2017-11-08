@@ -36,9 +36,16 @@ def EsOutLayer(candidato, n, desvStandard):
 	if n < 3 : return False
 
 	n = ParseToModfiedThompsonIndex(n)
-	print "VER SI ES INTERCONTINENTAL : " + str( modifiedThompsonT[str(n)] * desvStandard )+ " , " + str(candidato)
-
 	return modifiedThompsonT[str(n)] * desvStandard < candidato
+
+
+def RttPromedio(response):
+	n = len(response[results])
+	res = 0 
+	for r in response[results]:
+		res += ( r[mensajeRecibido][IP].time - r[mensajeEnviado][IP].sent_time)/n
+
+	return res
 
 
 
@@ -58,6 +65,8 @@ def TraceRouteConOutlayers(ipDst = "", url = ""):
 
 	rutaMasProbableASeguir = []
 
+	ultimoRtt = 0 
+
 	while res[results][0][mensajeRecibido][ICMP].type == timeExceed :
 
 		ipDevueltos = {}
@@ -73,37 +82,24 @@ def TraceRouteConOutlayers(ipDst = "", url = ""):
 			if ipDevueltos[ip] > ipDevueltos[ipMasProbable] :
 				ipMasProbable = ip
 
-		caminoRecorrido.append({'rtt': None, 'ip_adress': ipMasProbable, 'salto_intercontinental': None, 'hop_num': ttl})
+
+		rttPromedio = RttPromedio(res)
+		caminoRecorrido.append({'rtt': rttPromedio - ultimoRtt, 'ip_adress': ipMasProbable, 'salto_intercontinental': False, 'hop_num': ttl})
+		ultimoRtt = rttPromedio
 		ttl += 1
 		res = sr(CincoPaquetesDeTipoEchoRequest(dst, ttl))
 
 
-	caminoRecorrido.append({'rtt': None, 'ip_adress': dst, 'salto_intercontinental': None, 'hop_num': ttl})
+	caminoRecorrido.append({'rtt': RttPromedio(res) - ultimoRtt, 'ip_adress': dst, 'salto_intercontinental': False, 'hop_num': ttl})
 
 	res = [[]]
 
-	for hop in caminoRecorrido:
-		rttPromedio = 0
-
-		print "MEDIR RTT CONTRA IP: " + hop['ip_adress']
-
-		res = sr(CincoPaquetesDeTipoEchoRequest(hop['ip_adress'], hop['hop_num']-1))
-
-		for x in res[results]:
-			rttPromedio += (x[mensajeRecibido][IP].time - x[mensajeEnviado][IP].sent_time)/5
-		hop['rtt'] = rttPromedio
-
-
-	for x in caminoRecorrido:
-		print json.dumps(x)
-
-	return
 
 	print "\n"
 	print "\n"
 
 	enlacesRegionales = caminoRecorrido[:]
-	enlacesIntercontinentales = []
+	
 
 
 	hayQueBuscarOutLayer = True
@@ -115,7 +111,7 @@ def TraceRouteConOutlayers(ipDst = "", url = ""):
 		medianaRtt = numpy.mean(tiemposRespuestas)
 		desvStandard = numpy.std(tiemposRespuestas)
 
-		candidatoASerOutLayer = {'src':0, 'rtt': 0} 
+		candidatoASerOutLayer = {'ip_adress': '11', 'rtt': 0} 
 
 
 		for c in enlacesRegionales:
@@ -124,25 +120,23 @@ def TraceRouteConOutlayers(ipDst = "", url = ""):
 		esOutLayer = EsOutLayer(candidatoASerOutLayer['rtt'], len(tiemposRespuestas), desvStandard)
 
 		if esOutLayer :
-			enlacesIntercontinentales.append(candidatoASerOutLayer)
+			for x in caminoRecorrido:
+				if x['ip_adress'] == candidatoASerOutLayer['ip_adress']:
+					x['salto_intercontinental'] = True
+
 			enlacesRegionales.remove(candidatoASerOutLayer)
 
 		hayQueBuscarOutLayer = esOutLayer
 
 
-	print "ENLACES REGIONALES: "
-	for x in enlacesRegionales:
-		print json.dumps(x)
 
-	print "\n"
 
-	print "ENLACES INTERCONTINENTALES: "
-	for x in enlacesIntercontinentales:
+	for x in caminoRecorrido:
 		print json.dumps(x)
 
 
 
 
 
-#TraceRouteConOutlayers(ipDst = '188.42.141.244')
-TraceRouteConOutlayers(url = 'google.com')
+TraceRouteConOutlayers(ipDst = '188.42.141.244')
+#TraceRouteConOutlayers(url = 'google.com')
