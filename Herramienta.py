@@ -14,16 +14,6 @@ mensajeRecibido = 1
 
 modifiedThompsonT = {'3': 1.1511, '4':1.4250,'5':1.5712,'6':1.6563,'7':1.7110,'8':1.7491,'9':1.7770,'10':1.7984,'11':1.8153,'12':1.8290,'13':1.8403,'14':1.8498,'15':1.8579,'16':1.8649,'17':1.8710,'18':1.8764,'19':1.8811,'20':1.8853,'21':1.8891,'22':1.8926,'23':1.8957,'24':1.8985,'25':1.9011,'26':1.9035,'27':1.9057,'28':1.9078,'29':1.9096,'30':1.9114,'31':1.9130,'32':1.9146,'33':1.9160,'34':1.9174,'35':1.9186,'36':1.9198,'37':1.9209,'38':1.9220,'39':1.9230,'40':1.9240,'42':1.9257,'44':1.9273,'46':1.9288,'48':1.9301,'50':1.9314,'52':1.9325,'54':1.9335,'56':1.9345,'58':1.9354,'60':1.9362,'65':1.9381,'70':1.9397,'75':1.9411,'80':1.9423,'90':1.9443,'100':1.9459,'150':1.9506,'200':1.9530,'500':1.9572}
 
-
-def avg (rtt1, rtt2,rtt3):
-	return (rtt1 + rtt2 + rtt3) / 3
-
-def TomarRttPromedio(res):
-	return avg  (res[results][0][mensajeRecibido][IP].time - res[results][0][mensajeEnviado][IP].sent_time, 
-						res[results][1][mensajeRecibido][IP].time - res[results][1][mensajeEnviado][IP].sent_time, 
-						res[results][2][mensajeRecibido][IP].time - res[results][2][mensajeEnviado][IP].sent_time)
-
-
 def ParseToModfiedThompsonIndex(n):
 	if n >= 3 and n <= 40 : return n 
 	if n >= 41 and n <= 60: return n - n%2
@@ -48,18 +38,18 @@ def RttPromedio(response):
 	return res
 
 
-
 def CincoPaquetesDeTipoEchoRequest(dst, ttl):
 	packetesAEnviar = [] 
 	for x in range(5):
 		packetesAEnviar.append(IP(dst = dst, ttl = ttl) / ICMP( type = echoRequest))
 	return packetesAEnviar
 
+
 def TraceRouteConOutlayers(ipDst = "", url = ""):
 	dst = url if ipDst == "" else ipDst
-	ttl = 1
+	ttl =  600
 
-	res = sr(CincoPaquetesDeTipoEchoRequest(dst, ttl))
+	res = sr(CincoPaquetesDeTipoEchoRequest(dst, ttl), timeout = 10)
  
 	caminoRecorrido = []
 
@@ -67,27 +57,36 @@ def TraceRouteConOutlayers(ipDst = "", url = ""):
 
 	ultimoRtt = 0 
 
-	while res[results][0][mensajeRecibido][ICMP].type == timeExceed :
+	while len(res[results]) == 0 or res[results][0][mensajeRecibido][ICMP].type == timeExceed :
+		print ttl
 
-		ipDevueltos = {}
-		for r in res[results]:
-			if r[mensajeRecibido][IP].src in ipDevueltos.keys():
-				ipDevueltos[r[mensajeRecibido][IP].src] += 1
-			else:
-				ipDevueltos[r[mensajeRecibido][IP].src] = 1
+		if(len(res[results]) == 0):
+			caminoRecorrido.append({'rtt': -1, 'ip_adress': '0.0.0.0', 'salto_intercontinental': False, 'hop_num': ttl})
+			ttl += 1
+			res =sr(CincoPaquetesDeTipoEchoRequest(dst, ttl), timeout = 2)
+	
+		else:
 
-		ipMasProbable = next(iter(ipDevueltos))
+			ipDevueltos = {}
+			for r in res[results]:
+				if r[mensajeRecibido][IP].src in ipDevueltos.keys():
+					ipDevueltos[r[mensajeRecibido][IP].src] += 1
+				else:
+					ipDevueltos[r[mensajeRecibido][IP].src] = 1
 
-		for ip in ipDevueltos :
-			if ipDevueltos[ip] > ipDevueltos[ipMasProbable] :
-				ipMasProbable = ip
+			ipMasProbable = next(iter(ipDevueltos))
+
+			for ip in ipDevueltos :
+				if ipDevueltos[ip] > ipDevueltos[ipMasProbable] :
+					ipMasProbable = ip
 
 
-		rttPromedio = RttPromedio(res)
-		caminoRecorrido.append({'rtt': rttPromedio - ultimoRtt, 'ip_adress': ipMasProbable, 'salto_intercontinental': False, 'hop_num': ttl})
-		ultimoRtt = rttPromedio
-		ttl += 1
-		res = sr(CincoPaquetesDeTipoEchoRequest(dst, ttl))
+			rttPromedio = RttPromedio(res)
+			caminoRecorrido.append({'rtt': rttPromedio - ultimoRtt, 'ip_adress': ipMasProbable, 'salto_intercontinental': False, 'hop_num': ttl})
+			ultimoRtt = rttPromedio
+			ttl += 1
+			res =sr(CincoPaquetesDeTipoEchoRequest(dst, ttl), timeout = 2)
+	
 
 
 	caminoRecorrido.append({'rtt': RttPromedio(res) - ultimoRtt, 'ip_adress': dst, 'salto_intercontinental': False, 'hop_num': ttl})
@@ -138,5 +137,5 @@ def TraceRouteConOutlayers(ipDst = "", url = ""):
 
 
 
-TraceRouteConOutlayers(ipDst = '188.42.141.244')
-#TraceRouteConOutlayers(url = 'google.com')
+#TraceRouteConOutlayers(ipDst = '188.42.141.244')
+TraceRouteConOutlayers(url = 'www.facebook.com')
